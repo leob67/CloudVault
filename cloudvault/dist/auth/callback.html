@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudVault - Signing in...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      text-align: center;
+      max-width: 400px;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #fca5a5;
+      border-top-color: #dc2626;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    h1 { color: #dc2626; margin-bottom: 10px; }
+    p { color: #6b7280; }
+    .error { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner" id="spinner"></div>
+    <h1>CloudVault</h1>
+    <p id="message">Completing sign in...</p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const error = params.get('error');
+
+    const spinner = document.getElementById('spinner');
+    const message = document.getElementById('message');
+
+    async function handleCallback() {
+      if (error) {
+        spinner.style.display = 'none';
+        message.innerHTML = '<span class="error">Sign in cancelled or failed.</span><br><br>You can close this window.';
+        window.opener?.postMessage({ type: 'GOOGLE_AUTH_ERROR', error: error }, window.location.origin);
+        return;
+      }
+
+      if (code) {
+        try {
+          const response = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              code: code,
+              client_id: '466158961924-i5drhg44t074livan7nbkt3talha12m6.apps.googleusercontent.com',
+              client_secret: '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',
+              redirect_uri: 'https://jtrjnycowv3o.space.minimax.io/auth/callback.html',
+              grant_type: 'authorization_code',
+            })
+          });
+
+          if (response.ok) {
+            const tokens = await response.json();
+            const userResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: 'Bearer ' + tokens.access_token }
+            });
+
+            if (userResponse.ok) {
+              const userInfo = await userResponse.json();
+              window.opener?.postMessage({
+                type: 'GOOGLE_AUTH_SUCCESS',
+                user: {
+                  id: userInfo.sub,
+                  email: userInfo.email,
+                  name: userInfo.name,
+                  picture: userInfo.picture,
+                  access_token: tokens.access_token
+                }
+              }, window.location.origin);
+              message.innerHTML = 'Sign in successful!<br>You can close this window.';
+              spinner.style.display = 'none';
+            }
+          }
+        } catch (e) {
+          console.error('Callback error:', e);
+          window.opener?.postMessage({ type: 'GOOGLE_AUTH_ERROR', error: e.message }, window.location.origin);
+          message.innerHTML = '<span class="error">Authentication failed.</span>';
+          spinner.style.display = 'none';
+        }
+      } else {
+        message.innerHTML = '<span class="error">No authorization code received.</span>';
+        spinner.style.display = 'none';
+      }
+    }
+
+    setTimeout(() => window.close(), 2000);
+    handleCallback();
+  </script>
+</body>
+</html>
